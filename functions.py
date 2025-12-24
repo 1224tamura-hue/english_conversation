@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import time
+import re
 from pathlib import Path
 import wave
 import pyaudio
@@ -174,3 +175,77 @@ def create_evaluation():
     llm_response_evaluation = st.session_state.chain_evaluation.predict(input="")
 
     return llm_response_evaluation
+
+def normalize_text_for_evaluation(text):
+    """
+    評価用にテキストを軽く正規化（句読点/大文字/軽微なスペル補正）
+    """
+
+    if not text:
+        return ""
+
+    # Normalize quotes and basic punctuation, then lowercase.
+    cleaned = (
+        text.strip()
+        .replace("’", "'")
+        .replace("“", '"')
+        .replace("”", '"')
+        .lower()
+    )
+
+    # Remove punctuation except apostrophes.
+    cleaned = re.sub(r"[.,!?;:()\[\]{}\"-]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    common_typos = {
+        "teh": "the",
+        "adn": "and",
+        "thier": "their",
+        "recieve": "receive",
+        "definately": "definitely",
+        "occured": "occurred",
+        "seperate": "separate",
+        "wich": "which",
+        "becuase": "because",
+        "dont": "don't",
+        "cant": "can't",
+        "wont": "won't",
+        "didnt": "didn't",
+        "isnt": "isn't",
+        "arent": "aren't",
+        "wasnt": "wasn't",
+        "werent": "weren't",
+        "hasnt": "hasn't",
+        "havent": "haven't",
+        "hadnt": "hadn't",
+        "shouldnt": "shouldn't",
+        "couldnt": "couldn't",
+        "wouldnt": "wouldn't",
+        "mustnt": "mustn't",
+        "im": "i'm",
+        "ive": "i've",
+        "ill": "i'll",
+        "id": "i'd",
+        "youre": "you're",
+        "youve": "you've",
+        "youll": "you'll",
+        "youd": "you'd",
+        "theyre": "they're",
+        "theyve": "they've",
+        "theyll": "they'll",
+        "theyd": "they'd",
+        "weve": "we've",
+        "well": "we'll",
+        "wed": "we'd",
+        "lets": "let's",
+        "thats": "that's",
+        "whats": "what's",
+        "heres": "here's",
+        "theres": "there's",
+        "wheres": "where's",
+        "hows": "how's",
+    }
+
+    words = cleaned.split()
+    corrected = [common_typos.get(word, word) for word in words]
+    return " ".join(corrected)

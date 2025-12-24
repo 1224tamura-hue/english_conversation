@@ -25,11 +25,7 @@ st.set_page_config(
     page_title=ct.APP_NAME
 )
 
-# タイトル表示
-st.markdown(f"## {ct.APP_NAME}")
-
-# 初期処理
-if "messages" not in st.session_state:
+def initialize_session_state():
     st.session_state.messages = []
     st.session_state.start_flg = False
     st.session_state.pre_mode = ""
@@ -47,7 +43,6 @@ if "messages" not in st.session_state:
     st.session_state.dictation_evaluation_first_flg = True
     st.session_state.chat_open_flg = False
     st.session_state.problem = ""
-    
     st.session_state.openai_obj = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     st.session_state.llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0.5)
     st.session_state.memory = ConversationSummaryBufferMemory(
@@ -55,9 +50,14 @@ if "messages" not in st.session_state:
         max_token_limit=1000,
         return_messages=True
     )
-
-    # モード「日常英会話」用のChain作成
     st.session_state.chain_basic_conversation = ft.create_chain(ct.SYSTEM_TEMPLATE_BASIC_CONVERSATION)
+
+# タイトル表示
+st.markdown(f"## {ct.APP_NAME}")
+
+# 初期処理
+if "messages" not in st.session_state:
+    initialize_session_state()
 
 # 初期表示
 # col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
@@ -126,6 +126,10 @@ if st.session_state.dictation_flg:
 if st.session_state.chat_open_flg:
     st.info("AIが読み上げた音声を、画面下部のチャット欄からそのまま入力・送信してください。")
 
+if st.button("一時中断", use_container_width=True):
+    initialize_session_state()
+    st.rerun()
+
 st.session_state.dictation_chat_message = st.chat_input("※「ディクテーション」選択時以外は送信不可")
 
 if st.session_state.dictation_chat_message and not st.session_state.chat_open_flg:
@@ -165,9 +169,11 @@ if st.session_state.start_flg:
             st.session_state.messages.append({"role": "user", "content": st.session_state.dictation_chat_message})
             
             with st.spinner('評価結果の生成中...'):
+                llm_text_for_eval = ft.normalize_text_for_evaluation(st.session_state.problem)
+                user_text_for_eval = ft.normalize_text_for_evaluation(st.session_state.dictation_chat_message)
                 system_template = ct.SYSTEM_TEMPLATE_EVALUATION.format(
-                    llm_text=st.session_state.problem,
-                    user_text=st.session_state.dictation_chat_message
+                    llm_text=llm_text_for_eval,
+                    user_text=user_text_for_eval
                 )
                 st.session_state.chain_evaluation = ft.create_chain(system_template)
                 # 問題文と回答を比較し、評価結果の生成を指示するプロンプトを作成
@@ -264,9 +270,11 @@ if st.session_state.start_flg:
 
         with st.spinner('評価結果の生成中...'):
             if st.session_state.shadowing_evaluation_first_flg:
+                llm_text_for_eval = ft.normalize_text_for_evaluation(st.session_state.problem)
+                user_text_for_eval = ft.normalize_text_for_evaluation(audio_input_text)
                 system_template = ct.SYSTEM_TEMPLATE_EVALUATION.format(
-                    llm_text=st.session_state.problem,
-                    user_text=audio_input_text
+                    llm_text=llm_text_for_eval,
+                    user_text=user_text_for_eval
                 )
                 st.session_state.chain_evaluation = ft.create_chain(system_template)
                 st.session_state.shadowing_evaluation_first_flg = False
