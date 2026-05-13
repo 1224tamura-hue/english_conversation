@@ -15,6 +15,7 @@ from langchain.schema import SystemMessage
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
+from openai import AuthenticationError
 import functions as ft
 import constants as ct
 
@@ -211,14 +212,20 @@ if st.session_state.start_flg:
 
         with st.spinner("回答の音声読み上げ準備中..."):
             # ユーザー入力値をLLMに渡して回答取得
-            llm_response = st.session_state.chain_basic_conversation.predict(input=audio_input_text)
+            try:
+                llm_response = st.session_state.chain_basic_conversation.predict(input=audio_input_text)
+            except AuthenticationError:
+                ft.stop_for_invalid_openai_key()
             
             # LLMからの回答を音声データに変換
-            llm_response_audio = st.session_state.openai_obj.audio.speech.create(
-                model="tts-1",
-                voice="alloy",
-                input=llm_response
-            )
+            try:
+                llm_response_audio = st.session_state.openai_obj.audio.speech.create(
+                    model="tts-1",
+                    voice="alloy",
+                    input=llm_response
+                )
+            except AuthenticationError:
+                ft.stop_for_invalid_openai_key()
 
             # 一旦mp3形式で音声ファイル作成後、wav形式に変換
             audio_output_file_path = f"{ct.AUDIO_OUTPUT_DIR}/audio_output_{int(time.time())}.wav"

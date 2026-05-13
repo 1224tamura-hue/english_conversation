@@ -2,13 +2,9 @@ import streamlit as st
 import os
 import time
 import re
-from pathlib import Path
-import wave
-import pyaudio
 from pydub import AudioSegment
 from audiorecorder import audiorecorder
-import numpy as np
-from scipy.io.wavfile import write
+from openai import AuthenticationError
 from langchain.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -19,6 +15,14 @@ from langchain.memory import ConversationSummaryBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.chains import ConversationChain
 import constants as ct
+
+
+def stop_for_invalid_openai_key():
+    st.error(
+        "OpenAI API キーが無効です。`.env` の `OPENAI_API_KEY` を有効なキーに更新し、"
+        "アプリを再読み込みしてください。"
+    )
+    st.stop()
 
 def record_audio(audio_input_file_path):
     """
@@ -46,12 +50,15 @@ def transcribe_audio(audio_input_file_path):
         audio_input_file_path: 音声入力ファイルのパス
     """
 
-    with open(audio_input_file_path, 'rb') as audio_input_file:
-        transcript = st.session_state.openai_obj.audio.transcriptions.create(
-            model="whisper-1",
-            file=audio_input_file,
-            language="en"
-        )
+    try:
+        with open(audio_input_file_path, 'rb') as audio_input_file:
+            transcript = st.session_state.openai_obj.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_input_file,
+                language="en"
+            )
+    except AuthenticationError:
+        stop_for_invalid_openai_key()
     
     # 音声入力ファイルを削除
     os.remove(audio_input_file_path)
@@ -99,24 +106,8 @@ def play_wav(audio_output_file_path, speed=1.0):
 
         modified_audio.export(audio_output_file_path, format="wav")
 
-    # PyAudioで再生
-    with wave.open(audio_output_file_path, 'rb') as play_target_file:
-        p = pyaudio.PyAudio()
-        stream = p.open(
-            format=p.get_format_from_width(play_target_file.getsampwidth()),
-            channels=play_target_file.getnchannels(),
-            rate=play_target_file.getframerate(),
-            output=True
-        )
-
-        data = play_target_file.readframes(1024)
-        while data:
-            stream.write(data)
-            data = play_target_file.readframes(1024)
-
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
+    with open(audio_output_file_path, "rb") as audio_file:
+        st.audio(audio_file.read(), format="audio/wav", autoplay=True)
     
     # LLMからの回答の音声ファイルを削除
     os.remove(audio_output_file_path)
@@ -149,14 +140,20 @@ def create_problem_and_play_audio():
     """
 
     # 問題文を生成するChainを実行し、問題文を取得
-    problem = st.session_state.chain_create_problem.predict(input="")
+    try:
+        problem = st.session_state.chain_create_problem.predict(input="")
+    except AuthenticationError:
+        stop_for_invalid_openai_key()
 
     # LLMからの回答を音声データに変換
-    llm_response_audio = st.session_state.openai_obj.audio.speech.create(
-        model="tts-1",
-        voice="alloy",
-        input=problem
-    )
+    try:
+        llm_response_audio = st.session_state.openai_obj.audio.speech.create(
+            model="tts-1",
+            voice="alloy",
+            input=problem
+        )
+    except AuthenticationError:
+        stop_for_invalid_openai_key()
 
     # 音声ファイルの作成
     audio_output_file_path = f"{ct.AUDIO_OUTPUT_DIR}/audio_output_{int(time.time())}.wav"
@@ -172,7 +169,10 @@ def create_evaluation():
     ユーザー入力値の評価生成
     """
 
-    llm_response_evaluation = st.session_state.chain_evaluation.predict(input="")
+    try:
+        llm_response_evaluation = st.session_state.chain_evaluation.predict(input="")
+    except AuthenticationError:
+        stop_for_invalid_openai_key()
 
     return llm_response_evaluation
 
